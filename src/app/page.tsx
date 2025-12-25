@@ -43,7 +43,9 @@ export default function LearnFlowPage() {
   };
 
   // Calculate total study time
-  const totalHours = Math.floor((dailyTime[0] * deadline[0]) / 60);
+  const totalHours = Math.floor(
+    ((dailyTime?.[0] ?? 0) * (deadline?.[0] ?? 0)) / 60,
+  );
 
   const learningPaths = [
     { title: "Linear Algebra", progress: 40 },
