@@ -25,22 +25,22 @@ export default function LearnFlowPage() {
   };
 
   // Convert minutes to display format
-  const formatTime = (minutes: number) => {
-    if (minutes < 60) return `${minutes} mins`;
-    const hours = Math.floor(minutes / 60);
-    return hours === 1 ? "1 hour" : `${hours} hours`;
-  };
+  // const formatTime = (minutes: number) => {
+  //   if (minutes < 60) return `${minutes} mins`;
+  //   const hours = Math.floor(minutes / 60);
+  //   return hours === 1 ? "1 hour" : `${hours} hours`;
+  // };
 
   // Convert days to display format
-  const formatDeadline = (days: number) => {
-    if (days < 7) return `${days} days`;
-    if (days < 30) {
-      const weeks = Math.floor(days / 7);
-      return weeks === 1 ? "1 week" : `${Math.floor(days / 7)} weeks`;
-    }
-    const months = Math.floor(days / 30);
-    return months === 1 ? "1 month" : `${months} months`;
-  };
+  // const formatDeadline = (days: number) => {
+  //   if (days < 7) return `${days} days`;
+  //   if (days < 30) {
+  //     const weeks = Math.floor(days / 7);
+  //     return weeks === 1 ? "1 week" : `${Math.floor(days / 7)} weeks`;
+  //   }
+  //   const months = Math.floor(days / 30);
+  //   return months === 1 ? "1 month" : `${months} months`;
+  // };
 
   // Calculate total study time
   const totalHours = Math.floor(

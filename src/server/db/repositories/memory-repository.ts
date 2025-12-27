@@ -141,7 +141,7 @@ export class DrizzleAgentMemoryRepository implements IAgentMemoryRepository {
     if (!memory) return null;
 
     const record = memory.historicalPerformance.find((p) => p.topic === topic);
-    return record || null;
+    return record ?? null;
   }
 
   /**
