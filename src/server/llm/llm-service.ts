@@ -11,6 +11,7 @@ import type {
 import type {
   GeneratedLesson,
   GeneratedQuiz,
+  GeneratedRoadmap,
   LLMGenerationRequest
 } from "../logic/core/types";
 import {
@@ -18,6 +19,7 @@ import {
   getLessonUserPrompt,
 } from "./prompts/lesson-prompt";
 import { getQuizSystemPrompt, getQuizUserPrompt } from "./prompts/quiz-prompt";
+import { getRoadmapSystemPrompt, getRoadmapUserPrompt } from "./prompts/roadmap-prompt";
 
 /**
  * Groq LLM Service - Koristi besplatan Groq API
@@ -188,6 +190,101 @@ export class GroqLLMService implements ILLMService {
         "Focus on understanding rather than memorization",
       ];
     }
+  }
+
+  /**
+   * Generates a structured learning roadmap
+   */
+  async generateRoadmap(
+    topic: string,
+    totalDays: number,
+    dailyMinutes: number
+  ): Promise<GeneratedRoadmap> {
+    console.log(
+      `[LLM] 🗺️  Generating roadmap: "${topic}" (${totalDays} days, ${dailyMinutes} min/day)`
+    );
+
+    const systemPrompt = getRoadmapSystemPrompt();
+    const userPrompt = getRoadmapUserPrompt(topic, totalDays, dailyMinutes);
+
+    try {
+      const startTime = Date.now();
+
+      const completion = await this.client.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: this.model,
+        temperature: 0.7,
+        max_tokens: 4000, // Larger for roadmaps
+        top_p: 1,
+        stream: false,
+      });
+
+      const duration = Date.now() - startTime;
+      const rawContent = completion.choices[0]?.message?.content || "";
+
+      console.log(`[LLM] ⏱️  Roadmap generation completed in ${duration}ms`);
+
+      // Parse JSON response
+      const roadmap = this.parseJSON<GeneratedRoadmap>(rawContent, "roadmap");
+
+      // Validate structure
+      this.validateRoadmap(roadmap, totalDays);
+
+      console.log(`[LLM] ✅ Roadmap generated with ${roadmap.days.length} days`);
+      return roadmap;
+    } catch (error) {
+      console.error("[LLM] ❌ Error generating roadmap:");
+      console.error(error);
+
+      // Fallback
+      return this.createFallbackRoadmap(topic, totalDays);
+    }
+  }
+
+  /**
+   * Validates roadmap structure
+   */
+  private validateRoadmap(roadmap: any, expectedDays: number): asserts roadmap is GeneratedRoadmap {
+    if (!roadmap.topic || typeof roadmap.topic !== "string") {
+      throw new Error("Invalid roadmap: missing or invalid topic");
+    }
+    if (!Array.isArray(roadmap.days) || roadmap.days.length === 0) {
+      throw new Error("Invalid roadmap: missing or invalid days");
+    }
+    // Validate each day
+    for (const day of roadmap.days) {
+      if (typeof day.dayNumber !== "number" || !day.topic || !day.description) {
+        throw new Error("Invalid roadmap: day missing required fields");
+      }
+    }
+  }
+
+  /**
+   * Fallback roadmap if LLM fails
+   */
+  private createFallbackRoadmap(topic: string, totalDays: number): GeneratedRoadmap {
+    console.log("[LLM] ⚠️  Using fallback roadmap");
+    const days = [];
+    for (let i = 1; i <= totalDays; i++) {
+      days.push({
+        dayNumber: i,
+        topic: `${topic} - Day ${i}`,
+        description: `Study session ${i} for ${topic}. AI generation was unavailable.`,
+        objectives: [
+          "Review key concepts",
+          "Practice exercises",
+          "Self-assessment"
+        ]
+      });
+    }
+    return {
+      topic,
+      totalDays,
+      days
+    };
   }
 
   // ============ HELPER METHODS ============

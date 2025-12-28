@@ -98,6 +98,22 @@ export interface GeneratedQuiz {
 }
 
 /**
+ * Generated Roadmap (from LLM)
+ */
+export interface RoadmapDay {
+  dayNumber: number;
+  topic: string;
+  description: string;
+  objectives: string[];
+}
+
+export interface GeneratedRoadmap {
+  topic: string;
+  totalDays: number;
+  days: RoadmapDay[];
+}
+
+/**
  * Agent Tick Result
  */
 export interface TickResult {

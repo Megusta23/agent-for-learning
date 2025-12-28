@@ -12,13 +12,20 @@ import {
 } from "../../db/schema";
 import * as schema from "../../db/schema"; // Import full schema for type definition
 import { nanoid } from "nanoid";
+import { GroqLLMService } from "../../llm/llm-service";
+import { env } from "~/env";
 
 export class RoadmapService {
-  constructor(private readonly db: LibSQLDatabase<typeof schema>) {}
+  private llmService: GroqLLMService;
+  
+  constructor(private readonly db: LibSQLDatabase<typeof schema>) {
+    // Initialize LLM service for roadmap generation
+    this.llmService = new GroqLLMService(env.GROQ_API_KEY);
+  }
 
 
   /**
-   * Creates a new roadmap for a user
+   * Creates a new roadmap for a user with AI-generated topics
    */
   async createRoadmap(
     userId: string, 
@@ -27,6 +34,14 @@ export class RoadmapService {
     dailyMinutes: number
   ): Promise<string> {
     const roadmapId = nanoid();
+    
+    // Generate roadmap content using LLM
+    console.log(`[RoadmapService] 🚀 Generating AI roadmap for "${topic}"...`);
+    const generatedRoadmap = await this.llmService.generateRoadmap(
+      topic,
+      totalDays,
+      dailyMinutes
+    );
     
     // Create the roadmap
     const newRoadmap: InsertRoadmap = {
@@ -41,22 +56,19 @@ export class RoadmapService {
 
     await this.db.insert(roadmaps).values(newRoadmap);
 
-    // Create empty days placeholders
-    // The content for these days will be generated just-in-time
-    const dayInserts: InsertDay[] = [];
-    for (let i = 1; i <= totalDays; i++) {
-        dayInserts.push({
-            id: nanoid(),
-            roadmapId,
-            dayNumber: i,
-            topic: `Day ${i} Placeholder`, // Will be updated by LLM
-            status: i === 1 ? "available" : "locked",
-            description: i === 1 ? "Getting Started" : undefined
-        });
-    }
+    // Create days with AI-generated content
+    const dayInserts: InsertDay[] = generatedRoadmap.days.map((day, index) => ({
+        id: nanoid(),
+        roadmapId,
+        dayNumber: day.dayNumber,
+        topic: day.topic,
+        status: day.dayNumber === 1 ? "available" : "locked",
+        description: day.description
+    }));
 
     await this.db.insert(days).values(dayInserts);
     
+    console.log(`[RoadmapService] ✅ Roadmap created with ${dayInserts.length} AI-generated days`);
     return roadmapId;
   }
 
