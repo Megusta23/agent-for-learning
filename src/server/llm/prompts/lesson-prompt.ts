@@ -23,10 +23,12 @@ CRITICAL INSTRUCTIONS:
 2. Use this EXACT structure:
 {
   "title": "Clear, descriptive lesson title",
-  "content": "Full lesson content in markdown format with examples",
+  "content": "Full lesson content in markdown format. IMPORTANT: Escape all newlines as \\n and double quotes as \\\" to ensure valid JSON.",
   "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
   "estimatedMinutes": 10
 }
+
+Note: The "content" field should be a single string with escaped newlines. Do not use actual newlines in the JSON string values.
 
 CONTENT GUIDELINES:
 - Start with a brief introduction explaining why this topic matters

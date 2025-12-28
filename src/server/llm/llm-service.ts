@@ -1,3 +1,4 @@
+
 // src/server/llm/llm-service.ts
 // =====================================================
 // GROQ LLM SERVICE - Besplatna LLM Integracija
@@ -12,6 +13,7 @@ import type {
   GeneratedLesson,
   GeneratedQuiz,
   GeneratedRoadmap,
+  GeneratedFlashcards,
   LLMGenerationRequest
 } from "../logic/core/types";
 import {
@@ -20,6 +22,7 @@ import {
 } from "./prompts/lesson-prompt";
 import { getQuizSystemPrompt, getQuizUserPrompt } from "./prompts/quiz-prompt";
 import { getRoadmapSystemPrompt, getRoadmapUserPrompt } from "./prompts/roadmap-prompt";
+import { getFlashcardSystemPrompt, getFlashcardUserPrompt } from "./prompts/flashcard-prompt";
 
 /**
  * Groq LLM Service - Koristi besplatan Groq API
@@ -140,6 +143,60 @@ export class GroqLLMService implements ILLMService {
 
       // Fallback
       return this.createFallbackQuiz(request.topic, request.difficulty);
+    }
+  }
+
+  /**
+   * Generates flashcards using Llama 3.3
+   */
+  async generateFlashcards(request: LLMGenerationRequest & { type: "flashcards" }, count: number): Promise<GeneratedFlashcards> {
+    console.log(
+      `[LLM] 🗂️  Generating ${count} flashcards: "${request.topic}"`
+    );
+
+    const systemPrompt = getFlashcardSystemPrompt(request.difficulty, count);
+    const userPrompt = getFlashcardUserPrompt(request.topic, count);
+
+    try {
+      const startTime = Date.now();
+
+      const completion = await this.client.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: this.model,
+        temperature: 0.7,
+        max_tokens: 1500,
+        top_p: 1,
+        stream: false,
+      });
+
+      const duration = Date.now() - startTime;
+      const rawContent = completion.choices[0]?.message?.content || "";
+
+      console.log(`[LLM] ⏱️  Flashcard generation completed in ${duration}ms`);
+
+      // Parse JSON response - handling nested object structure from prompt
+      const parsed = this.parseJSON<{ flashcards: GeneratedFlashcards }>(rawContent, "flashcards");
+      const flashcards = parsed.flashcards || parsed; // Handle both wrapped and unwrapped
+
+      console.log(
+        `[LLM] ✅ Generated ${flashcards.cards?.length} flashcards for "${flashcards.topic}"`
+      );
+      
+      // Basic validation
+      if (!flashcards.cards || !Array.isArray(flashcards.cards)) {
+        throw new Error("Invalid flashcards structure");
+      }
+
+      return flashcards as GeneratedFlashcards;
+    } catch (error) {
+      console.error("[LLM] ❌ Error generating flashcards:");
+      console.error(error);
+
+      // Fallback
+      return this.createFallbackFlashcards(request.topic, count);
     }
   }
 
@@ -294,13 +351,13 @@ export class GroqLLMService implements ILLMService {
    * Pokušava ukloniti markdown backticks i druge česte greške
    */
   private parseJSON<T>(content: string, type: string): T {
-    // Ukloni markdown code blocks
+    // Remove markdown code blocks
     let cleaned = content
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
       .trim();
 
-    // Ukloni potencijalni tekst prije/poslije JSON-a
+    // Find the first { and last }
     const jsonStart = cleaned.indexOf("{");
     const jsonEnd = cleaned.lastIndexOf("}");
 
@@ -308,13 +365,26 @@ export class GroqLLMService implements ILLMService {
       cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
     }
 
+    // Try to handle unescaped newlines within string values
+    // This regex looks for double-quoted strings and handles escaped quotes within them
+    const sanitized = cleaned.replace(/"((?:\\.|[^"\\])*)"/g, (match, p1) => {
+      // Replace literal newlines with escaped \n inside quotes
+      return '"' + p1.replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
+    });
+
     try {
-      return JSON.parse(cleaned) as T;
+      return JSON.parse(sanitized) as T;
     } catch (error) {
-      console.error(`[LLM] ❌ Failed to parse ${type} JSON:`);
-      console.error("Raw content:", content);
-      console.error("Cleaned content:", cleaned);
-      throw new Error(`Invalid JSON response for ${type}`);
+      // If sanitized failed, try original cleaned
+      try {
+        return JSON.parse(cleaned) as T;
+      } catch (innerError) {
+        console.error(`[LLM] ❌ Failed to parse ${type} JSON:`);
+        console.error("Raw content:", content);
+        console.error("Cleaned content:", cleaned);
+        console.error("Sanitized content snippet:", sanitized.substring(0, 100) + "...");
+        throw new Error(`Invalid JSON response for ${type}`);
+      }
     }
   }
 
@@ -410,6 +480,25 @@ export class GroqLLMService implements ILLMService {
             "This is a fallback quiz. The AI service was unavailable.",
         },
       ],
+    };
+  }
+
+  /**
+   * Fallback flashcards if LLM fails
+   */
+  private createFallbackFlashcards(topic: string, count: number): GeneratedFlashcards {
+    console.log("[LLM] ⚠️  Using fallback flashcards");
+    const cards = [];
+    for (let i = 1; i <= count; i++) {
+        cards.push({
+            front: `Concept ${i} of ${topic}`,
+            back: `This is a fallback definition for concept ${i}.`,
+            tags: ["fallback", "concept"]
+        });
+    }
+    return {
+      topic,
+      cards
     };
   }
 }

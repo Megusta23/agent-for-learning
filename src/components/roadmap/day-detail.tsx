@@ -169,14 +169,14 @@ export function DayDetail({ day, roadmapId, nextDay, currentDayNumber }: DayDeta
             Complete Day {currentDayNumber} to unlock
           </Button>
         ) : isCompleted ? (
-          <Link href={`/roadmap/${roadmapId}/day/${day.id}`}>
+          <Link href={`/roadmap/${roadmapId}/learn?dayId=${day.id}`}>
             <Button className="w-full gap-2 bg-gray-600 text-lg hover:bg-gray-700">
               <Eye className="h-5 w-5" />
               Review Day {day.dayNumber}
             </Button>
           </Link>
         ) : (
-          <Link href={`/roadmap/${roadmapId}/learn`}>
+          <Link href={`/roadmap/${roadmapId}/learn?dayId=${day.id}`}>
             <Button className="w-full gap-2 bg-teal-600 text-lg hover:bg-teal-700">
               <PlayCircle className="h-5 w-5" />
               Start Day {day.dayNumber}

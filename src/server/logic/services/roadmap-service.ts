@@ -8,7 +8,10 @@ import {
     quizzes, 
     flashcards,
     type InsertRoadmap,
-    type InsertDay
+    type InsertDay,
+    type InsertLesson,
+    type InsertQuiz,
+    type InsertFlashcard
 } from "../../db/schema";
 import * as schema from "../../db/schema"; // Import full schema for type definition
 import { nanoid } from "nanoid";
@@ -175,80 +178,136 @@ export class RoadmapService {
    * Gets a specific day with its lesson (if exists)
    */
   async getDayWithLesson(dayId: string) {
-    const day = await this.db.select().from(days).where(eq(days.id, dayId)).get();
+    const day = await this.db.query.days.findFirst({
+      where: eq(days.id, dayId)
+    });
+
     if (!day) return null;
 
-    // Get associated lesson
-    const lesson = await this.db
-      .select()
-      .from(lessons)
-      .where(eq(lessons.dayId, dayId))
-      .get();
+    const lesson = await this.db.query.lessons.findFirst({
+      where: eq(lessons.dayId, dayId)
+    });
 
-    // Get the roadmap for topic context
-    const roadmap = await this.db
-      .select()
-      .from(roadmaps)
-      .where(eq(roadmaps.id, day.roadmapId))
-      .get();
+    const quiz = await this.db.query.quizzes.findFirst({
+      where: eq(quizzes.dayId, dayId)
+    });
 
-    return { day, lesson, roadmap };
+    const dayFlashcards = await this.db.query.flashcards.findMany({
+      where: eq(flashcards.dayId, dayId)
+    });
+
+    return {
+      day,
+      lesson,
+      quiz,
+      flashcards: dayFlashcards
+    };
   }
 
   /**
    * Generates lesson content for a specific day using LLM
    */
   async generateDayLesson(dayId: string, userId: string) {
-    const dayData = await this.getDayWithLesson(dayId);
-    if (!dayData) {
-      throw new Error("Day not found");
-    }
+    // 1. Check if lesson already exists
+    const existingLesson = await this.db.query.lessons.findFirst({
+      where: and(eq(lessons.dayId, dayId), eq(lessons.userId, userId))
+    });
 
-    const { day, lesson: existingLesson, roadmap } = dayData;
-
-    // If lesson already exists, return it
     if (existingLesson) {
-      console.log(`[RoadmapService] Lesson already exists for day ${day.dayNumber}`);
       return existingLesson;
     }
 
-    // Generate new lesson using LLM
-    console.log(`[RoadmapService] 📚 Generating lesson for "${day.topic}"...`);
-    const generatedLesson = await this.llmService.generateLesson({
-      type: "lesson",
-      topic: day.topic,
-      difficulty: 2, // Default to intermediate
-      context: {
-        userMasteryLevel: 50 // Default mastery
-      }
+    // 2. Get day context
+    const day = await this.db.query.days.findFirst({
+      where: eq(days.id, dayId)
     });
 
-    // Save lesson to database
-    const lessonId = nanoid();
-    await this.db.insert(lessons).values({
-      id: lessonId,
+    if (!day) throw new Error("Day not found");
+
+    console.log(`[RoadmapService] 🤖 Generating full day content for day: ${day.dayNumber} (${day.topic})`);
+
+    // 3. Generate content in parallel (Lesson, Quiz, Flashcards)
+    const dayNumber = day.dayNumber;
+    
+    // Scale difficulty/count based on day number
+    const difficulty = Math.min(Math.floor(dayNumber / 7) + 1, 4);
+    const quizQuestionCount = Math.min(3 + Math.floor((dayNumber - 1) / 2), 10);
+    const flashcardCount = Math.min(5 + Math.floor((dayNumber - 1) / 3) * 2, 15);
+
+    const [generatedLesson, generatedQuiz, generatedFlashcards] = await Promise.all([
+      // Lesson
+      this.llmService.generateLesson({
+        topic: day.topic,
+        type: "lesson",
+        difficulty,
+        context: {
+          previousErrors: [], 
+          userMasteryLevel: 0
+        }
+      }),
+      // Quiz
+      this.llmService.generateQuiz({
+        topic: day.topic,
+        type: "quiz",
+        difficulty,
+        questionCount: quizQuestionCount
+      }),
+      // Flashcards
+      this.llmService.generateFlashcards(
+        {
+          topic: day.topic,
+          type: "flashcards",
+          difficulty,
+        },
+        flashcardCount
+      )
+    ]);
+
+    // 4. Save Lesson
+    const newLesson: InsertLesson = {
+      id: nanoid(),
       userId,
       dayId,
       topic: day.topic,
       title: generatedLesson.title,
       content: generatedLesson.content,
       keyPoints: JSON.stringify(generatedLesson.keyPoints),
-      difficulty: 2,
-      estimatedMinutes: generatedLesson.estimatedMinutes,
-      order: 1,
+      difficulty,
+      estimatedMinutes: generatedLesson.estimatedMinutes || 15,
       completed: false
-    });
+    };
+    await this.db.insert(lessons).values(newLesson);
 
-    console.log(`[RoadmapService] ✅ Lesson created: "${generatedLesson.title}"`);
+    // 5. Save Quiz
+    const newQuiz: InsertQuiz = {
+      id: nanoid(),
+      userId,
+      dayId,
+      topic: day.topic,
+      title: generatedQuiz.title,
+      questions: JSON.stringify(generatedQuiz.questions),
+      difficulty,
+      totalQuestions: generatedQuiz.questions.length,
+      completed: false
+    };
+    await this.db.insert(quizzes).values(newQuiz);
 
-    // Fetch and return the saved lesson
-    const savedLesson = await this.db
-      .select()
-      .from(lessons)
-      .where(eq(lessons.id, lessonId))
-      .get();
+    // 6. Save Flashcards
+    for (const card of generatedFlashcards.cards) {
+       await this.db.insert(flashcards).values({
+         id: nanoid(),
+         userId,
+         dayId,
+         front: card.front,
+         back: card.back,
+         tags: JSON.stringify(card.tags || []),
+         masteryLevel: 0
+       });
+    }
 
-    return savedLesson;
+    console.log(`[RoadmapService] ✅ Generated Lesson, Quiz (${generatedQuiz.questions.length}), and Flashcards (${generatedFlashcards.cards.length})`);
+    
+    return newLesson;
   }
 
   /**

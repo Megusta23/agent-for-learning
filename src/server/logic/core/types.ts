@@ -7,12 +7,21 @@
  * Agent Decision Types
  */
 export type AgentDecision =
-  | { type: "GENERATE_LESSON"; topic: string; difficulty: number }
+  | {
+      type: "GENERATE_LESSON";
+      topic: string;
+      difficulty: number;
+    }
   | {
       type: "GENERATE_QUIZ";
       topic: string;
       difficulty: number;
       questionCount: number;
+    }
+  | { 
+      type: "GENERATE_FLASHCARDS"; 
+      topic: string; 
+      count: number;
     }
   | { type: "WAIT"; reason: string }
   | {
@@ -67,13 +76,14 @@ export interface AgentMemory {
  * LLM Generation Request
  */
 export interface LLMGenerationRequest {
-  type: "lesson" | "quiz";
+  type: "lesson" | "quiz" | "flashcards";
   topic: string;
   difficulty: number;
   context?: {
     previousErrors?: string[];
     userMasteryLevel?: number;
   };
+  questionCount?: number;
 }
 
 /**
@@ -94,6 +104,15 @@ export interface GeneratedQuiz {
     options: string[];
     correctAnswer: number;
     explanation: string;
+  }[];
+}
+
+export interface GeneratedFlashcards {
+  topic: string;
+  cards: {
+    front: string;
+    back: string;
+    tags: string[];
   }[];
 }
 
