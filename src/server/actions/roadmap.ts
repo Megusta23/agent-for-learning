@@ -34,3 +34,30 @@ export async function getUserRoadmapsAction() {
   const service = new RoadmapService(db);
   return service.getUserRoadmaps(userId);
 }
+
+export async function startLearningAction(dayId: string) {
+  // TODO: Get actual user ID from session/auth
+  const userId = "user_default";
+  
+  const service = new RoadmapService(db);
+  const lesson = await service.generateDayLesson(dayId, userId);
+  
+  return lesson;
+}
+
+export async function completeDayAction(roadmapId: string, dayId: string) {
+  const service = new RoadmapService(db);
+  const result = await service.completeDay(roadmapId, dayId);
+  
+  return result;
+}
+
+export async function getDayWithLessonAction(dayId: string) {
+  const service = new RoadmapService(db);
+  return service.getDayWithLesson(dayId);
+}
+
+export async function deleteRoadmapAction(roadmapId: string) {
+  const service = new RoadmapService(db);
+  return service.deleteRoadmap(roadmapId);
+}
