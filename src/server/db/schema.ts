@@ -37,9 +37,86 @@ export const userLearningState = sqliteTable(
   },
   (table) => ({
     userIdIdx: index("user_learning_state_user_id_idx").on(table.userId),
-    needsAttentionIdx: index("user_learning_state_needs_attention_idx").on(
-      table.needsAttention,
-    ),
+  }),
+);
+
+// ============================================
+// ROADMAPS TABLE
+// High-level plan for a user
+// ============================================
+export const roadmaps = sqliteTable(
+  "roadmaps",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    topic: text("topic").notNull(),
+    status: text("status", { enum: ["active", "completed", "archived"] })
+      .notNull()
+      .default("active"),
+    totalDays: integer("total_days").notNull(),
+    dailyMinutes: integer("daily_minutes").notNull(),
+    currentDay: integer("current_day").notNull().default(1),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    userIdIdx: index("roadmaps_user_id_idx").on(table.userId),
+    statusIdx: index("roadmaps_status_idx").on(table.status),
+  }),
+);
+
+// ============================================
+// DAYS TABLE
+// Specific day within a roadmap
+// ============================================
+export const days = sqliteTable(
+  "days",
+  {
+    id: text("id").primaryKey(),
+    roadmapId: text("roadmap_id").notNull(),
+    dayNumber: integer("day_number").notNull(),
+    topic: text("topic").notNull(),
+    description: text("description"), // Brief overview of the day
+    status: text("status", { enum: ["locked", "available", "completed"] })
+      .notNull()
+      .default("locked"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    roadmapIdx: index("days_roadmap_id_idx").on(table.roadmapId),
+    statusIdx: index("days_status_idx").on(table.status),
+  }),
+);
+
+// ============================================
+// FLASHCARDS TABLE
+// Flashcards for specific days/topics
+// ============================================
+export const flashcards = sqliteTable(
+  "flashcards",
+  {
+    id: text("id").primaryKey(),
+    dayId: text("day_id"), // Optional: can be linked to a specific day
+    userId: text("user_id").notNull(),
+    front: text("front").notNull(),
+    back: text("back").notNull(),
+    tags: text("tags"), // JSON array of strings
+    masteryLevel: integer("mastery_level").notNull().default(0), // 0-5 (Leitner system)
+    nextReviewAt: integer("next_review_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    userIdIdx: index("flashcards_user_id_idx").on(table.userId),
+    dayIdIdx: index("flashcards_day_id_idx").on(table.dayId),
+    nextReviewIdx: index("flashcards_next_review_idx").on(table.nextReviewAt),
   }),
 );
 
@@ -52,12 +129,14 @@ export const lessons = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
+    dayId: text("day_id"), // Link to specific day in roadmap
     topic: text("topic").notNull(),
     title: text("title").notNull(),
     content: text("content").notNull(), // Markdown content
     keyPoints: text("key_points").notNull(), // JSON array of strings
     difficulty: integer("difficulty").notNull(), // 1-4
     estimatedMinutes: integer("estimated_minutes").notNull(),
+    order: integer("order").notNull().default(1), // Order within the day
     completed: integer("completed", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -82,6 +161,7 @@ export const quizzes = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
+    dayId: text("day_id"), // Link to specific day in roadmap
     topic: text("topic").notNull(),
     title: text("title").notNull(),
     questions: text("questions").notNull(), // JSON array of question objects
@@ -195,3 +275,12 @@ export type InsertAgentLog = typeof agentLogs.$inferInsert;
 
 export type QuizSubmission = typeof quizSubmissions.$inferSelect;
 export type InsertQuizSubmission = typeof quizSubmissions.$inferInsert;
+
+export type Roadmap = typeof roadmaps.$inferSelect;
+export type InsertRoadmap = typeof roadmaps.$inferInsert;
+
+export type Day = typeof days.$inferSelect;
+export type InsertDay = typeof days.$inferInsert;
+
+export type Flashcard = typeof flashcards.$inferSelect;
+export type InsertFlashcard = typeof flashcards.$inferInsert;
